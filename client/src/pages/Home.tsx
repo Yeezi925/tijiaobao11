@@ -1,10 +1,10 @@
 /**
- * 体教宝 - 主页面
+ * 体教宝 - 主页面 (优化版)
  * 
  * 功能模块：
  * 1. Excel 导入与成绩解析
- * 2. 学生成绩查询与展示
- * 3. 数据统计与分析
+ * 2. 多层级学生成绩查询（学校、年段、班级、个人）
+ * 3. 完整的数据统计与分析
  * 4. AI 训练建议生成
  */
 
@@ -13,9 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, BarChart3, Users, Download, Trash2, Sparkles } from "lucide-react";
-import { StudentRecord, calculateStatistics } from "@/lib/scoring";
+import { Upload, BarChart3, Users, Download, Trash2, Sparkles, ChevronDown } from "lucide-react";
+import { StudentRecord } from "@/lib/scoring";
 import { parseExcelFile, exportToExcel } from "@/lib/excel";
+import { performAnalysis, getUniqueGrades, getUniqueClasses } from "@/lib/analysis";
 import { toast } from "sonner";
 
 const STORAGE_KEY = "tijiaobao_scores";
@@ -23,9 +24,20 @@ const STORAGE_KEY = "tijiaobao_scores";
 export default function Home() {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<StudentRecord[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("import");
+
+  // 查询过滤器
+  const [queryType, setQueryType] = useState<"all" | "grade" | "class" | "name">("all");
+  const [selectedGrade, setSelectedGrade] = useState("");
+  const [selectedClass, setSelectedClass] = useState("");
+  const [searchName, setSearchName] = useState("");
+
+  // 分析过滤器
+  const [analysisLevel, setAnalysisLevel] = useState<"school" | "year" | "class">("school");
+  const [analysisGrade, setAnalysisGrade] = useState("");
+  const [analysisClass, setAnalysisClass] = useState("");
+  const [showGenderCompare, setShowGenderCompare] = useState(false);
 
   // 初始化：从本地存储加载数据
   useEffect(() => {
@@ -66,23 +78,21 @@ export default function Home() {
     }
   };
 
-  // 处理搜索
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    if (!query.trim()) {
-      setFilteredStudents(students);
-      return;
+  // 处理查询过滤
+  useEffect(() => {
+    let filtered = students;
+
+    if (queryType === "grade" && selectedGrade) {
+      filtered = filtered.filter((s) => s.grade?.toLowerCase() === selectedGrade.toLowerCase());
+    } else if (queryType === "class" && selectedClass) {
+      filtered = filtered.filter((s) => s.class?.toLowerCase() === selectedClass.toLowerCase());
+    } else if (queryType === "name" && searchName) {
+      const q = searchName.toLowerCase();
+      filtered = filtered.filter((s) => s.name?.toLowerCase().includes(q));
     }
 
-    const q = query.toLowerCase();
-    const filtered = students.filter(
-      (s) =>
-        s.name?.toLowerCase().includes(q) ||
-        s.class?.toLowerCase().includes(q) ||
-        s.grade?.toLowerCase().includes(q)
-    );
     setFilteredStudents(filtered);
-  };
+  }, [students, queryType, selectedGrade, selectedClass, searchName]);
 
   // 清空数据
   const handleClearData = () => {
@@ -109,20 +119,26 @@ export default function Home() {
     }
   };
 
+  const grades = getUniqueGrades(students);
+  const classes = getUniqueClasses(students);
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       {/* 顶部导航栏 */}
-      <header className="bg-white shadow-sm border-b border-border">
+      <header className="bg-white shadow-sm border-b border-border sticky top-0 z-50">
         <div className="container py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-primary">体教宝</h1>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+                体教宝
+              </h1>
               <p className="text-sm text-muted-foreground">现代化体育成绩管理系统</p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                已导入: <span className="font-semibold text-foreground">{students.length}</span> 条记录
-              </span>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm text-muted-foreground">已导入</p>
+                <p className="text-2xl font-bold text-primary">{students.length}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -131,7 +147,7 @@ export default function Home() {
       {/* 主内容区 */}
       <main className="container py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="import" className="flex items-center gap-2">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">导入</span>
@@ -152,15 +168,15 @@ export default function Home() {
 
           {/* 导入标签页 */}
           <TabsContent value="import" className="space-y-4">
-            <Card className="p-8">
+            <Card className="p-8 bg-white">
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold">导入 Excel 文件</h2>
+                <h2 className="text-2xl font-semibold">导入 Excel 文件</h2>
                 <p className="text-sm text-muted-foreground">
                   支持 .xlsx, .xls, .csv 格式。请确保 Excel 包含以下列：姓名、班级、性别、各项成绩
                 </p>
 
-                <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center hover:bg-primary/5 transition-colors">
-                  <label className="cursor-pointer">
+                <div className="border-2 border-dashed border-primary rounded-lg p-12 text-center hover:bg-primary/5 transition-colors cursor-pointer">
+                  <label className="cursor-pointer block">
                     <input
                       type="file"
                       accept=".xlsx,.xls,.csv"
@@ -168,10 +184,12 @@ export default function Home() {
                       disabled={isLoading}
                       className="hidden"
                     />
-                    <div className="flex flex-col items-center gap-2">
-                      <Upload className="w-8 h-8 text-primary" />
-                      <p className="font-medium">点击选择文件或拖拽上传</p>
-                      <p className="text-xs text-muted-foreground">支持 Excel 和 CSV 格式</p>
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="p-3 bg-primary/10 rounded-full">
+                        <Upload className="w-8 h-8 text-primary" />
+                      </div>
+                      <p className="font-semibold text-lg">点击选择文件或拖拽上传</p>
+                      <p className="text-sm text-muted-foreground">支持 Excel 和 CSV 格式</p>
                     </div>
                   </label>
                 </div>
@@ -188,96 +206,188 @@ export default function Home() {
 
           {/* 查询标签页 */}
           <TabsContent value="query" className="space-y-4">
-            <Card className="p-6">
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold">学生成绩查询</h2>
+            <Card className="p-6 bg-white">
+              <h2 className="text-2xl font-semibold mb-6">学生成绩查询</h2>
 
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="搜索姓名、班级或年级..."
-                    value={searchQuery}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    className="flex-1"
-                  />
-                </div>
-
-                {filteredStudents.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    {students.length === 0 ? "请先导入 Excel 文件" : "没有找到匹配的记录"}
+              {/* 查询过滤器 */}
+              <div className="space-y-4 mb-6 p-4 bg-secondary/30 rounded-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">查询方式</label>
+                    <select
+                      value={queryType}
+                      onChange={(e) => {
+                        setQueryType(e.target.value as any);
+                        setSelectedGrade("");
+                        setSelectedClass("");
+                        setSearchName("");
+                      }}
+                      className="w-full mt-1 px-3 py-2 border border-border rounded-lg bg-white"
+                    >
+                      <option value="all">全部学生</option>
+                      <option value="grade">按年段</option>
+                      <option value="class">按班级</option>
+                      <option value="name">按姓名</option>
+                    </select>
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border bg-secondary">
-                          <th className="px-4 py-2 text-left font-semibold">姓名</th>
-                          <th className="px-4 py-2 text-left font-semibold">班级</th>
-                          <th className="px-4 py-2 text-center font-semibold">性别</th>
-                          <th className="px-4 py-2 text-center font-semibold">总分</th>
-                          <th className="px-4 py-2 text-center font-semibold">长跑/游泳</th>
-                          <th className="px-4 py-2 text-center font-semibold">球类</th>
-                          <th className="px-4 py-2 text-center font-semibold">选考</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredStudents.map((student, idx) => (
-                          <tr
-                            key={idx}
-                            className="border-b border-border hover:bg-blue-50 transition-colors"
-                          >
-                            <td className="px-4 py-3 font-medium">{student.name}</td>
-                            <td className="px-4 py-3">{student.class || "-"}</td>
-                            <td className="px-4 py-3 text-center">{student.gender}</td>
-                            <td className="px-4 py-3 text-center font-semibold text-primary">
-                              {student.total40}
-                            </td>
-                            <td className="px-4 py-3 text-center text-sm">{student.longContrib}</td>
-                            <td className="px-4 py-3 text-center text-sm">{student.ballContrib}</td>
-                            <td className="px-4 py-3 text-center text-sm">{student.selectContrib}</td>
-                          </tr>
+
+                  {queryType === "grade" && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">选择年段</label>
+                      <select
+                        value={selectedGrade}
+                        onChange={(e) => setSelectedGrade(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-border rounded-lg bg-white"
+                      >
+                        <option value="">-- 选择年段 --</option>
+                        {grades.map((grade) => (
+                          <option key={grade} value={grade}>
+                            {grade}
+                          </option>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                      </select>
+                    </div>
+                  )}
 
-                <div className="flex gap-2 pt-4">
-                  <Button onClick={handleExport} variant="outline" className="gap-2">
-                    <Download className="w-4 h-4" />
-                    导出 Excel
-                  </Button>
-                  <Button onClick={handleClearData} variant="destructive" className="gap-2">
-                    <Trash2 className="w-4 h-4" />
-                    清空数据
-                  </Button>
+                  {queryType === "class" && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">选择班级</label>
+                      <select
+                        value={selectedClass}
+                        onChange={(e) => setSelectedClass(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-border rounded-lg bg-white"
+                      >
+                        <option value="">-- 选择班级 --</option>
+                        {classes.map((cls) => (
+                          <option key={cls} value={cls}>
+                            {cls}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {queryType === "name" && (
+                    <div className="sm:col-span-3">
+                      <label className="text-sm font-medium text-muted-foreground">输入姓名</label>
+                      <Input
+                        placeholder="搜索学生姓名..."
+                        value={searchName}
+                        onChange={(e) => setSearchName(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              {/* 成绩表格 */}
+              {filteredStudents.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  {students.length === 0 ? "请先导入 Excel 文件" : "没有找到匹配的记录"}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-gradient-to-r from-blue-50 to-indigo-50">
+                        <th className="px-4 py-3 text-left font-semibold">姓名</th>
+                        <th className="px-4 py-3 text-left font-semibold">班级</th>
+                        <th className="px-4 py-3 text-center font-semibold">性别</th>
+                        <th className="px-4 py-3 text-center font-semibold text-primary font-bold">总分</th>
+                        <th className="px-4 py-3 text-center font-semibold">长跑/游泳</th>
+                        <th className="px-4 py-3 text-center font-semibold">球类项目</th>
+                        <th className="px-4 py-3 text-center font-semibold">选考项目1</th>
+                        <th className="px-4 py-3 text-center font-semibold">选考项目2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredStudents.map((student, idx) => (
+                        <tr
+                          key={idx}
+                          className="border-b border-border hover:bg-blue-50/50 transition-colors"
+                        >
+                          <td className="px-4 py-3 font-medium">{student.name}</td>
+                          <td className="px-4 py-3 text-sm">{student.class || "-"}</td>
+                          <td className="px-4 py-3 text-center text-sm">{student.gender}</td>
+                          <td className="px-4 py-3 text-center font-bold text-primary text-lg">
+                            {student.total40}
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm">
+                            <div className="font-medium">{student.longContrib}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {student.swim ? `游泳: ${student.swim}` : student.longrun ? `长跑: ${student.longrun}` : "-"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm">
+                            <div className="font-medium">{student.ballContrib}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {student.football ? `足球: ${student.football}` : student.basketball ? `篮球: ${student.basketball}` : student.volleyball ? `排球: ${student.volleyball}` : "-"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm">
+                            <div className="font-medium">{student.selectedProjects?.[0]?.contrib || "-"}</div>
+                            <div className="text-xs text-muted-foreground">{student.selectedProjects?.[0]?.name || "-"}</div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm">
+                            <div className="font-medium">{student.selectedProjects?.[1]?.contrib || "-"}</div>
+                            <div className="text-xs text-muted-foreground">{student.selectedProjects?.[1]?.name || "-"}</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 操作按钮 */}
+              <div className="flex gap-2 pt-6 border-t border-border">
+                <Button onClick={handleExport} variant="outline" className="gap-2">
+                  <Download className="w-4 h-4" />
+                  导出 Excel
+                </Button>
+                <Button onClick={handleClearData} variant="destructive" className="gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  清空数据
+                </Button>
               </div>
             </Card>
           </TabsContent>
 
           {/* 分析标签页 */}
           <TabsContent value="analysis" className="space-y-4">
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">数据统计分析</h2>
+            <Card className="p-6 bg-white">
+              <h2 className="text-2xl font-semibold mb-6">数据统计分析</h2>
+
               {students.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center py-12 text-muted-foreground">
                   请先导入数据以查看统计信息
                 </div>
               ) : (
-                <AnalysisPanel students={students} />
+                <AnalysisPanel
+                  students={students}
+                  analysisLevel={analysisLevel}
+                  setAnalysisLevel={setAnalysisLevel}
+                  analysisGrade={analysisGrade}
+                  setAnalysisGrade={setAnalysisGrade}
+                  analysisClass={analysisClass}
+                  setAnalysisClass={setAnalysisClass}
+                  showGenderCompare={showGenderCompare}
+                  setShowGenderCompare={setShowGenderCompare}
+                  grades={grades}
+                  classes={classes}
+                />
               )}
             </Card>
           </TabsContent>
 
           {/* AI 建议标签页 */}
           <TabsContent value="ai" className="space-y-4">
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">AI 训练建议</h2>
-              <div className="text-center py-8 text-muted-foreground">
-                <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>此功能需要配置 AI API 密钥</p>
-                <p className="text-xs mt-2">敬请期待完整版本</p>
-              </div>
+            <Card className="p-8 bg-white text-center">
+              <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <h2 className="text-xl font-semibold mb-2">AI 训练建议</h2>
+              <p className="text-muted-foreground mb-4">此功能需要配置 AI API 密钥</p>
+              <p className="text-sm text-muted-foreground">敬请期待完整版本</p>
             </Card>
           </TabsContent>
         </Tabs>
@@ -289,9 +399,39 @@ export default function Home() {
 /**
  * 分析面板组件
  */
-function AnalysisPanel({ students }: { students: StudentRecord[] }) {
-  const stats = calculateStatistics(students);
+function AnalysisPanel({
+  students,
+  analysisLevel,
+  setAnalysisLevel,
+  analysisGrade,
+  setAnalysisGrade,
+  analysisClass,
+  setAnalysisClass,
+  showGenderCompare,
+  setShowGenderCompare,
+  grades,
+  classes
+}: {
+  students: any[];
+  analysisLevel: "school" | "year" | "class";
+  setAnalysisLevel: (level: "school" | "year" | "class") => void;
+  analysisGrade: string;
+  setAnalysisGrade: (grade: string) => void;
+  analysisClass: string;
+  setAnalysisClass: (cls: string) => void;
+  showGenderCompare: boolean;
+  setShowGenderCompare: (show: boolean) => void;
+  grades: string[];
+  classes: string[];
+}) {
+  const analysis = performAnalysis(
+    students,
+    analysisLevel,
+    analysisLevel === "year" ? analysisGrade : analysisLevel === "class" ? analysisClass : undefined,
+    showGenderCompare
+  );
 
+  const stats = analysis.stats;
   if (!stats) {
     return <div className="text-center text-muted-foreground">无法计算统计数据</div>;
   }
@@ -311,16 +451,124 @@ function AnalysisPanel({ students }: { students: StudentRecord[] }) {
 
   return (
     <div className="space-y-6">
-      {/* 关键指标 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="总人数" value={stats.count.toString()} />
-        <StatCard label="平均分" value={stats.avgTotal} />
-        <StatCard label="优秀率" value={stats.excellentRate} />
-        <StatCard label="及格率" value={stats.passRate} />
+      {/* 分析级别选择 */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-secondary/30 rounded-lg">
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">分析级别</label>
+          <select
+            value={analysisLevel}
+            onChange={(e) => {
+              setAnalysisLevel(e.target.value as any);
+              setAnalysisGrade("");
+              setAnalysisClass("");
+            }}
+            className="w-full mt-1 px-3 py-2 border border-border rounded-lg bg-white"
+          >
+            <option value="school">学校整体</option>
+            <option value="year">按年段</option>
+            <option value="class">按班级</option>
+          </select>
+        </div>
+
+        {analysisLevel === "year" && (
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">选择年段</label>
+            <select
+              value={analysisGrade}
+              onChange={(e) => setAnalysisGrade(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-border rounded-lg bg-white"
+            >
+              <option value="">-- 选择年段 --</option>
+              {grades.map((grade) => (
+                <option key={grade} value={grade}>
+                  {grade}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {analysisLevel === "class" && (
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">选择班级</label>
+            <select
+              value={analysisClass}
+              onChange={(e) => setAnalysisClass(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-border rounded-lg bg-white"
+            >
+              <option value="">-- 选择班级 --</option>
+              {classes.map((cls) => (
+                <option key={cls} value={cls}>
+                  {cls}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="flex items-end">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showGenderCompare}
+              onChange={(e) => setShowGenderCompare(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium">显示性别对比</span>
+          </label>
+        </div>
       </div>
 
+      {/* 关键指标 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="总人数" value={stats.count.toString()} color="from-blue-500 to-blue-600" />
+        <StatCard label="平均分" value={stats.avgTotal} color="from-green-500 to-green-600" />
+        <StatCard label="优秀率" value={stats.excellentRate} color="from-purple-500 to-purple-600" />
+        <StatCard label="及格率" value={stats.passRate} color="from-orange-500 to-orange-600" />
+      </div>
+
+      {/* 性别对比 */}
+      {showGenderCompare && analysis.maleStats && analysis.femaleStats && (
+        <div className="grid grid-cols-2 gap-4 p-4 bg-secondary/30 rounded-lg">
+          <div>
+            <h3 className="font-semibold mb-3 text-blue-600">男生统计</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>人数</span>
+                <span className="font-semibold">{analysis.maleStats.count}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>平均分</span>
+                <span className="font-semibold">{analysis.maleStats.avgTotal}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>优秀率</span>
+                <span className="font-semibold">{analysis.maleStats.excellentRate}</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3 text-pink-600">女生统计</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>人数</span>
+                <span className="font-semibold">{analysis.femaleStats.count}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>平均分</span>
+                <span className="font-semibold">{analysis.femaleStats.avgTotal}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>优秀率</span>
+                <span className="font-semibold">{analysis.femaleStats.excellentRate}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 成绩分布 */}
-      <div className="bg-secondary/50 rounded-lg p-4">
+      <div className="bg-secondary/30 rounded-lg p-4">
         <h3 className="font-semibold mb-4">成绩分布</h3>
         <div className="space-y-3">
           <DistributionBar label="优秀 (≥36分)" count={scoreDistribution.excellent} total={stats.count} color="bg-green-500" />
@@ -331,23 +579,22 @@ function AnalysisPanel({ students }: { students: StudentRecord[] }) {
       </div>
 
       {/* 各项平均分 */}
-      <div className="bg-secondary/50 rounded-lg p-4">
-        <h3 className="font-semibold mb-4">各项平均得分</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-primary">{stats.avgLong}</p>
-            <p className="text-xs text-muted-foreground">长跑/游泳</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-primary">{stats.avgBall}</p>
-            <p className="text-xs text-muted-foreground">球类</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-primary">{stats.avgSelect}</p>
-            <p className="text-xs text-muted-foreground">选考项目</p>
+      {analysis.singleItemStats && (
+        <div className="bg-secondary/30 rounded-lg p-4">
+          <h3 className="font-semibold mb-4">各项平均成绩</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Object.entries(analysis.singleItemStats).map(([name, data]) => (
+              data.count > 0 && (
+                <div key={name} className="bg-white rounded-lg p-3 border border-border">
+                  <p className="text-xs text-muted-foreground mb-1">{name}</p>
+                  <p className="text-lg font-bold text-primary">{data.avg}</p>
+                  <p className="text-xs text-muted-foreground">({data.count}人)</p>
+                </div>
+              )
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -355,11 +602,19 @@ function AnalysisPanel({ students }: { students: StudentRecord[] }) {
 /**
  * 统计卡片组件
  */
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  color
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
   return (
-    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 text-center">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <p className="text-2xl font-bold text-primary">{value}</p>
+    <div className={`bg-gradient-to-br ${color} rounded-lg p-4 text-white shadow-md`}>
+      <p className="text-xs opacity-90 mb-1">{label}</p>
+      <p className="text-3xl font-bold">{value}</p>
     </div>
   );
 }
@@ -388,7 +643,7 @@ function DistributionBar({
           {count} ({percentage.toFixed(1)}%)
         </span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
         <div className={`h-full ${color} transition-all duration-300`} style={{ width: `${percentage}%` }} />
       </div>
     </div>
