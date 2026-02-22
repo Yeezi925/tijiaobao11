@@ -1,69 +1,12 @@
 /**
- * 阿里云通义千问 API 集成模块
- * 用于生成 AI 训练建议和教案
+ * AI 内容生成模块
+ * 使用 Manus 内置 LLM 服务生成 AI 训练建议和教案
  */
 
-import axios from "axios";
+import { invokeLLM } from "./_core/llm";
 
 /**
- * 调用通义千问 API 生成内容
- */
-async function callQianwenAPI(prompt: string, systemPrompt?: string): Promise<string> {
-  const apiKey = process.env.QIANWEN_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("通义千问 API Key 未配置");
-  }
-
-  try {
-    console.log("[通义千问 API] 开始调用...");
-
-    const response = await axios.post(
-      "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
-      {
-        model: "qwen-plus",
-        messages: [
-          ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
-          { role: "user", content: prompt }
-        ],
-        parameters: {
-          temperature: 0.7,
-          max_tokens: 2000
-        }
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 30000
-      }
-    );
-
-    console.log("[通义千问 API] 调用成功");
-
-    // 提取响应内容
-    if (response.data?.output?.text) {
-      return response.data.output.text;
-    }
-
-    if (response.data?.choices?.[0]?.message?.content) {
-      return response.data.choices[0].message.content;
-    }
-
-    throw new Error("通义千问 API 返回空响应");
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      console.error("[通义千问 API 错误]", error.response?.status, error.response?.data);
-      throw new Error(`通义千问 API 请求失败: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`);
-    }
-    console.error("[通义千问 API 错误]", error);
-    throw error;
-  }
-}
-
-/**
- * 调用通义千问 API 生成 AI 训练建议
+ * 调用 LLM 生成 AI 训练建议
  */
 export async function generateTrainingAdvice(studentInfo: {
   name: string;
@@ -108,11 +51,39 @@ export async function generateTrainingAdvice(studentInfo: {
 2. 具体的训练建议（3-5条）
 3. 预期改进目标`;
 
-  return callQianwenAPI(userPrompt, systemPrompt);
+  try {
+    console.log("[AI 建议] 调用 LLM 服务生成建议...");
+
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ]
+    });
+
+    console.log("[AI 建议] LLM 响应成功");
+
+    // 提取响应内容
+    if (response.choices && response.choices.length > 0) {
+      const content = response.choices[0].message.content;
+      return typeof content === "string" ? content : JSON.stringify(content);
+    }
+
+    throw new Error("LLM 返回空响应");
+  } catch (error) {
+    console.error("[AI 建议生成失败]", error);
+    throw error;
+  }
 }
 
 /**
- * 调用通义千问 API 生成教案
+ * 调用 LLM 生成教案
  */
 export async function generateLessonPlan(params: {
   topic: string;
@@ -155,15 +126,43 @@ export async function generateLessonPlan(params: {
 
   userPrompt += `\n\n用户需求：${params.userMessage}`;
 
-  return callQianwenAPI(userPrompt, systemPrompt);
+  try {
+    console.log("[教案生成] 调用 LLM 服务生成教案...");
+
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ]
+    });
+
+    console.log("[教案生成] LLM 响应成功");
+
+    // 提取响应内容
+    if (response.choices && response.choices.length > 0) {
+      const content = response.choices[0].message.content;
+      return typeof content === "string" ? content : JSON.stringify(content);
+    }
+
+    throw new Error("LLM 返回空响应");
+  } catch (error) {
+    console.error("[教案生成失败]", error);
+    throw error;
+  }
 }
 
 /**
- * 测试通义千问 API 连接
+ * 测试 LLM 连接
  */
 export async function testDoubaoConnection(): Promise<boolean> {
   try {
-    console.log("[通义千问连接测试] 开始测试...");
+    console.log("[LLM 连接测试] 开始测试...");
     const result = await generateTrainingAdvice({
       name: "测试学生",
       gender: "男",
@@ -172,10 +171,10 @@ export async function testDoubaoConnection(): Promise<boolean> {
       ballContrib: 7,
       selectContrib: 11
     });
-    console.log("[通义千问连接测试] 成功");
+    console.log("[LLM 连接测试] 成功");
     return !!result;
   } catch (error) {
-    console.error("[通义千问连接测试失败]", error);
+    console.error("[LLM 连接测试失败]", error);
     return false;
   }
 }
