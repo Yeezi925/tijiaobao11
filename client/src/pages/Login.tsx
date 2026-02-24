@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 
 type UserType = "teacher" | "student" | "parent";
@@ -18,8 +17,6 @@ export default function Login() {
   const [grade, setGrade] = useState("");
   const [className, setClassName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  const loginMutation = trpc.auth.login.useMutation();
 
   const handleSelectRole = (role: UserType) => {
     setUserType(role);
@@ -39,14 +36,6 @@ export default function Login() {
 
     setIsLoading(true);
     try {
-      await loginMutation.mutateAsync({
-        name,
-        userType,
-        school: school || undefined,
-        grade: grade || undefined,
-        className: className || undefined,
-      });
-
       // 保存用户信息到 localStorage
       const userInfo = {
         name,
@@ -60,15 +49,19 @@ export default function Login() {
 
       toast.success("登入成功！");
       
-      // 根据身份跳转到不同的页面
-      if (userType === "teacher") {
-        setLocation("/teacher");
-      } else {
-        setLocation("/");
-      }
+      // 稍伤一下再跳转，确保 localStorage 已保存
+      setTimeout(() => {
+        // 根据身份跳转到不同的页面
+        if (userType === "teacher") {
+          window.location.href = "/teacher";
+        } else if (userType === "student") {
+          window.location.href = "/student";
+        } else {
+          window.location.href = "/student";
+        }
+      }, 500);
     } catch (error) {
       toast.error(`登入失败: ${error instanceof Error ? error.message : "未知错误"}`);
-    } finally {
       setIsLoading(false);
     }
   };
