@@ -21,14 +21,17 @@ import { toast } from "sonner";
 import AIAdvice from "./AIAdvice";
 import LessonPlanGenerator from "./LessonPlanGenerator";
 import { BookOpen } from "lucide-react";
+import { useLocation } from "wouter";
 
 const STORAGE_KEY = "tijiaobao_scores";
 
 export default function Home() {
+  const [, setLocation] = useLocation();
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("query");
+  const [isLoggedIn, setIsLoggedIn] = useState(true); // 默认认为已登入
 
   // 查询过滤器
   const [queryType, setQueryType] = useState<"all" | "grade" | "class" | "name">("all");
@@ -42,8 +45,17 @@ export default function Home() {
   const [analysisClass, setAnalysisClass] = useState("");
   const [showGenderCompare, setShowGenderCompare] = useState(false);
 
-  // 初始化：从本地存储加载数据
+  // 初始化：检查登入状态和从本地存储加载数据
   useEffect(() => {
+    // 检查是否已登入
+    const userInfo = localStorage.getItem("userInfo");
+    if (!userInfo) {
+      // 如果没有登入，重定向到登入页面
+      setIsLoggedIn(false);
+      setLocation("/login");
+      return;
+    }
+
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
@@ -54,7 +66,7 @@ export default function Home() {
         console.error("加载数据失败:", error);
       }
     }
-  }, []);
+  }, [setLocation]);
 
   // 保存到本地存储
   const saveToStorage = (data: StudentRecord[]) => {

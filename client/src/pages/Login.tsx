@@ -6,6 +6,16 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 
+type UserInfo = {
+  name: string;
+  phoneNumber?: string;
+  userType: "teacher" | "student" | "parent";
+  school?: string;
+  grade?: string;
+  className?: string;
+  loginTime: string;
+};
+
 type LoginStep = "initial" | "userType" | "profile";
 type UserType = "teacher" | "student" | "parent";
 
@@ -57,6 +67,17 @@ export default function Login() {
         grade: grade || undefined,
         className: className || undefined,
       });
+
+      // 保存用户信息到 localStorage
+      localStorage.setItem("userInfo", JSON.stringify({
+        name,
+        phoneNumber: phoneNumber || undefined,
+        userType,
+        school: school || undefined,
+        grade: grade || undefined,
+        className: className || undefined,
+        loginTime: new Date().toISOString(),
+      }));
 
       toast.success("登入成功");
       setLocation("/");
