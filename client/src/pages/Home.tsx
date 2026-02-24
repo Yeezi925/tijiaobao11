@@ -51,10 +51,11 @@ export default function Home() {
     const userInfo = localStorage.getItem("userInfo");
     if (!userInfo) {
       // 如果没有登入，重定向到登入页面
-      setIsLoggedIn(false);
       setLocation("/login");
       return;
     }
+
+    setIsLoggedIn(true);
 
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -66,7 +67,7 @@ export default function Home() {
         console.error("加载数据失败:", error);
       }
     }
-  }, [setLocation]);
+  }, []);
 
   // 保存到本地存储
   const saveToStorage = (data: StudentRecord[]) => {
@@ -465,7 +466,7 @@ function AnalysisPanel({
 
   const stats = analysis.stats;
   if (!stats) {
-    return <div className="text-center text-muted-foreground">无法计算统计数据</div>;
+    return null; // 不显示任何内容，由路由自动重定向
   }
 
   return (
