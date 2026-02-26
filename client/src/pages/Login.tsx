@@ -3,13 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
 
 type UserType = "teacher" | "student" | "parent";
 type LoginStep = "selectRole" | "inputInfo";
 
 export default function Login() {
-  const [, setLocation] = useLocation();
   const [step, setStep] = useState<LoginStep>("selectRole");
   const [userType, setUserType] = useState<UserType | null>(null);
   const [name, setName] = useState("");
