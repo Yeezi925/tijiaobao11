@@ -25,6 +25,14 @@ import { BookOpen } from "lucide-react";
 const STORAGE_KEY = "tijiaobao_scores";
 
 export default function Home() {
+  const userRole = localStorage.getItem("userRole");
+  
+  // 如果未登入或角色不是教师，重定向到登入页面
+  if (!userRole || userRole !== "teacher") {
+    window.location.href = "/login";
+    return null;
+  }
+
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -141,6 +149,15 @@ export default function Home() {
                 <p className="text-sm text-muted-foreground">已导入</p>
                 <p className="text-2xl font-bold text-primary">{students.length}</p>
               </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  localStorage.removeItem("userRole");
+                  window.location.href = "/login";
+                }}
+              >
+                退出登入
+              </Button>
             </div>
           </div>
         </div>
