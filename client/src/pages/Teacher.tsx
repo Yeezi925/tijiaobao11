@@ -6,14 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Download, Trash2, BarChart3, Sparkles, FileText } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-
-interface StudentRecord {
-  name: string;
-  class: string;
-  gender: string;
-  total40: string;
-  [key: string]: string;
-}
+import { performAnalysis, getUniqueGrades, getUniqueClasses } from "@/lib/analysis";
+import AIAdvice from "./AIAdvice";
+import LessonPlanGenerator from "./LessonPlanGenerator";
+import { StudentRecord } from "@/lib/scoring";
 
 const STORAGE_KEY = "tijiaobao_scores";
 
@@ -21,10 +17,21 @@ export default function Teacher() {
   const [isReady, setIsReady] = useState(false);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<StudentRecord[]>([]);
+  const [activeTab, setActiveTab] = useState("import");
+  
+  // 查询过滤器
   const [queryType, setQueryType] = useState<"all" | "grade" | "class" | "name">("all");
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [searchName, setSearchName] = useState("");
+
+  // 分析过滤器
+  const [analysisLevel, setAnalysisLevel] = useState<"school" | "year" | "class">("school");
+  const [analysisGrade, setAnalysisGrade] = useState("");
+  const [analysisClass, setAnalysisClass] = useState("");
+  const [showGenderCompare, setShowGenderCompare] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -46,7 +53,6 @@ export default function Teacher() {
       return;
     }
 
-    // 加载已保存的数据
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
@@ -66,7 +72,7 @@ export default function Teacher() {
     let filtered = students;
 
     if (queryType === "grade" && selectedGrade) {
-      filtered = filtered.filter((s) => s.class?.includes(selectedGrade));
+      filtered = filtered.filter((s) => s.grade?.includes(selectedGrade));
     } else if (queryType === "class" && selectedClass) {
       filtered = filtered.filter((s) => s.class === selectedClass);
     } else if (queryType === "name" && searchName) {
@@ -77,6 +83,21 @@ export default function Teacher() {
 
     setFilteredStudents(filtered);
   }, [queryType, selectedGrade, selectedClass, searchName, students]);
+
+  // 处理分析
+  useEffect(() => {
+    if (activeTab === "analysis" && students.length > 0) {
+      let keyword = "";
+      if (analysisLevel === "year" && analysisGrade) {
+        keyword = analysisGrade;
+      } else if (analysisLevel === "class" && analysisClass) {
+        keyword = analysisClass;
+      }
+
+      const result = performAnalysis(students, analysisLevel, keyword, showGenderCompare);
+      setAnalysisResult(result);
+    }
+  }, [activeTab, analysisLevel, analysisGrade, analysisClass, showGenderCompare, students]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -137,7 +158,7 @@ export default function Teacher() {
     return <div className="min-h-screen bg-gray-50"></div>;
   }
 
-  const uniqueGrades = Array.from(new Set(students.map((s) => s.class?.split(/[0-9]/)[0]).filter(Boolean)));
+  const uniqueGrades = Array.from(new Set(students.map((s) => s.grade).filter(Boolean)));
   const uniqueClasses = Array.from(new Set(students.map((s) => s.class).filter(Boolean)));
 
   return (
@@ -153,13 +174,14 @@ export default function Teacher() {
           </Button>
         </div>
 
-        <Tabs defaultValue="import" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="import">📥 导入</TabsTrigger>
             <TabsTrigger value="query">📋 查询</TabsTrigger>
             <TabsTrigger value="analysis">📊 分析</TabsTrigger>
             <TabsTrigger value="ai">✨ AI建议</TabsTrigger>
             <TabsTrigger value="lesson">📝 教案</TabsTrigger>
+            <TabsTrigger value="stats">📈 统计</TabsTrigger>
           </TabsList>
 
           {/* 导入标签页 */}
@@ -169,7 +191,7 @@ export default function Teacher() {
               <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
                 <Upload className="mx-auto mb-4 text-muted-foreground" size={48} />
                 <p className="text-muted-foreground mb-4">
-                  支持 .xlsx, .xls, .csv 格式，请确保 Excel 包含以下列：姓名、班级、性别、各项成绩
+                  支持 .xlsx, .xls, .csv 格式，请确保 Excel 包含以下列：姓名、班级、年段、性别、各项成绩
                 </p>
                 <input
                   ref={fileInputRef}
@@ -276,6 +298,7 @@ export default function Teacher() {
                     <thead className="bg-secondary">
                       <tr>
                         <th className="px-4 py-2 text-left">姓名</th>
+                        <th className="px-4 py-2 text-left">年段</th>
                         <th className="px-4 py-2 text-left">班级</th>
                         <th className="px-4 py-2 text-left">性别</th>
                         <th className="px-4 py-2 text-center">成绩</th>
@@ -285,6 +308,7 @@ export default function Teacher() {
                       {filteredStudents.map((student, index) => (
                         <tr key={index} className="border-b hover:bg-secondary/50">
                           <td className="px-4 py-2">{student.name}</td>
+                          <td className="px-4 py-2">{student.grade}</td>
                           <td className="px-4 py-2">{student.class}</td>
                           <td className="px-4 py-2">{student.gender}</td>
                           <td className="px-4 py-2 text-center font-bold text-green-600">
@@ -308,6 +332,188 @@ export default function Teacher() {
             {students.length > 0 ? (
               <Card className="p-6">
                 <h2 className="text-xl font-bold mb-4">数据分析</h2>
+                
+                {/* 分析选项 */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">分析级别</label>
+                    <select
+                      value={analysisLevel}
+                      onChange={(e) => setAnalysisLevel(e.target.value as any)}
+                      className="w-full mt-2 px-3 py-2 border border-border rounded-lg bg-white"
+                    >
+                      <option value="school">全校</option>
+                      <option value="year">按年段</option>
+                      <option value="class">按班级</option>
+                    </select>
+                  </div>
+
+                  {analysisLevel === "year" && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">选择年段</label>
+                      <select
+                        value={analysisGrade}
+                        onChange={(e) => setAnalysisGrade(e.target.value)}
+                        className="w-full mt-2 px-3 py-2 border border-border rounded-lg bg-white"
+                      >
+                        <option value="">-- 选择年段 --</option>
+                        {uniqueGrades.map((g: any) => (
+                          <option key={g} value={g}>
+                            {g}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {analysisLevel === "class" && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">选择班级</label>
+                      <select
+                        value={analysisClass}
+                        onChange={(e) => setAnalysisClass(e.target.value)}
+                        className="w-full mt-2 px-3 py-2 border border-border rounded-lg bg-white"
+                      >
+                        <option value="">-- 选择班级 --</option>
+                        {uniqueClasses.map((c: any) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showGenderCompare}
+                        onChange={(e) => setShowGenderCompare(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm font-medium">男女对比</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 统计数据展示 */}
+                {analysisResult && (
+                  <div className="space-y-6">
+                    {/* 基础统计 */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <Card className="p-4 bg-blue-50">
+                        <p className="text-sm text-muted-foreground">学生总数</p>
+                        <p className="text-2xl font-bold text-blue-600">{analysisResult.stats?.count || 0}</p>
+                      </Card>
+                      <Card className="p-4 bg-green-50">
+                        <p className="text-sm text-muted-foreground">平均成绩</p>
+                        <p className="text-2xl font-bold text-green-600">{analysisResult.stats?.average || "0.00"}</p>
+                      </Card>
+                      <Card className="p-4 bg-purple-50">
+                        <p className="text-sm text-muted-foreground">最高成绩</p>
+                        <p className="text-2xl font-bold text-purple-600">{analysisResult.stats?.max || "0.00"}</p>
+                      </Card>
+                      <Card className="p-4 bg-orange-50">
+                        <p className="text-sm text-muted-foreground">最低成绩</p>
+                        <p className="text-2xl font-bold text-orange-600">{analysisResult.stats?.min || "0.00"}</p>
+                      </Card>
+                    </div>
+
+                    {/* 男女对比 */}
+                    {showGenderCompare && analysisResult.maleStats && analysisResult.femaleStats && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Card className="p-4 bg-blue-50">
+                          <p className="text-lg font-bold mb-3">男生统计</p>
+                          <div className="space-y-2 text-sm">
+                            <p>人数: {analysisResult.maleStats.count}</p>
+                            <p>平均: {analysisResult.maleStats.average}</p>
+                            <p>最高: {analysisResult.maleStats.max}</p>
+                            <p>最低: {analysisResult.maleStats.min}</p>
+                          </div>
+                        </Card>
+                        <Card className="p-4 bg-pink-50">
+                          <p className="text-lg font-bold mb-3">女生统计</p>
+                          <div className="space-y-2 text-sm">
+                            <p>人数: {analysisResult.femaleStats.count}</p>
+                            <p>平均: {analysisResult.femaleStats.average}</p>
+                            <p>最高: {analysisResult.femaleStats.max}</p>
+                            <p>最低: {analysisResult.femaleStats.min}</p>
+                          </div>
+                        </Card>
+                      </div>
+                    )}
+
+                    {/* 项目统计 */}
+                    {analysisResult.projectStats && (
+                      <Card className="p-4">
+                        <p className="text-lg font-bold mb-3">项目统计</p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="p-3 bg-blue-50 rounded">
+                            <p className="text-sm text-muted-foreground">长跑/游泳</p>
+                            <p className="text-lg font-bold">{analysisResult.projectStats.longrun.avg}</p>
+                            <p className="text-xs text-muted-foreground">{analysisResult.projectStats.longrun.count} 人</p>
+                          </div>
+                          <div className="p-3 bg-green-50 rounded">
+                            <p className="text-sm text-muted-foreground">球类项目</p>
+                            <p className="text-lg font-bold">{analysisResult.projectStats.ball.avg}</p>
+                            <p className="text-xs text-muted-foreground">{analysisResult.projectStats.ball.count} 人</p>
+                          </div>
+                          <div className="p-3 bg-purple-50 rounded">
+                            <p className="text-sm text-muted-foreground">选考项目</p>
+                            <p className="text-lg font-bold">{analysisResult.projectStats.select.avg}</p>
+                            <p className="text-xs text-muted-foreground">{analysisResult.projectStats.select.count} 人</p>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* 单项统计 */}
+                    {analysisResult.singleItemStats && Object.keys(analysisResult.singleItemStats).length > 0 && (
+                      <Card className="p-4">
+                        <p className="text-lg font-bold mb-3">单项成绩统计</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {Object.entries(analysisResult.singleItemStats).map(([name, data]: any) => (
+                            <div key={name} className="p-3 bg-gray-50 rounded">
+                              <p className="text-sm font-medium">{name}</p>
+                              <p className="text-lg font-bold text-primary">{data.avg}</p>
+                              <p className="text-xs text-muted-foreground">{data.count} 人参加</p>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </Card>
+            ) : (
+              <Card className="p-6 text-center text-muted-foreground">
+                <p>暂无数据，请先在导入页面上传 Excel 文件</p>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* AI建议标签页 */}
+          <TabsContent value="ai" className="space-y-4">
+            {students.length > 0 ? (
+              <AIAdvice students={students as any} />
+            ) : (
+              <Card className="p-6 text-center text-muted-foreground">
+                <p>暂无数据，请先在导入页面上传 Excel 文件</p>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* 教案标签页 */}
+          <TabsContent value="lesson" className="space-y-4">
+            <LessonPlanGenerator />
+          </TabsContent>
+
+          {/* 统计标签页 */}
+          <TabsContent value="stats" className="space-y-4">
+            {students.length > 0 ? (
+              <Card className="p-6">
+                <h2 className="text-xl font-bold mb-4">快速统计</h2>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <Card className="p-4 bg-blue-50">
                     <p className="text-sm text-muted-foreground">学生总数</p>
@@ -353,38 +559,6 @@ export default function Teacher() {
                 <p>暂无数据，请先在导入页面上传 Excel 文件</p>
               </Card>
             )}
-          </TabsContent>
-
-          {/* AI建议标签页 */}
-          <TabsContent value="ai" className="space-y-4">
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-4">AI 训练建议</h2>
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <Sparkles className="mx-auto mb-4 text-muted-foreground" size={48} />
-                  <p className="text-muted-foreground">AI 建议功能开发中...</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    将为每个学生生成个性化的训练建议
-                  </p>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* 教案标签页 */}
-          <TabsContent value="lesson" className="space-y-4">
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-4">教案生成</h2>
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <FileText className="mx-auto mb-4 text-muted-foreground" size={48} />
-                  <p className="text-muted-foreground">教案生成功能开发中...</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    将根据课程标准生成体育教案
-                  </p>
-                </div>
-              </div>
-            </Card>
           </TabsContent>
         </Tabs>
       </div>
