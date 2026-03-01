@@ -6,13 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StudentRecord } from "@/lib/scoring";
 import { performAnalysis, getUniqueGrades, getUniqueClasses } from "@/lib/analysis";
 import { toast } from "sonner";
+import { Sparkles, Loader2 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { Streamdown } from "streamdown";
 
 const STORAGE_KEY = "tijiaobao_scores";
-
-// 临时占位组件
-function AIAdvice() {
-  return <div className="p-4 text-muted-foreground">AI 建议功能开发中...</div>;
-}
 
 export default function Parent() {
   const [students, setStudents] = useState<StudentRecord[]>([]);
@@ -20,6 +18,7 @@ export default function Parent() {
   const [activeTab, setActiveTab] = useState("query");
   const [shareCode, setShareCode] = useState("");
   const [isLoadingShare, setIsLoadingShare] = useState(false);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
 
   // 查询过滤器
   const [queryType, setQueryType] = useState<"all" | "grade" | "class" | "name">("all");
@@ -27,10 +26,9 @@ export default function Parent() {
   const [selectedClass, setSelectedClass] = useState("");
   const [searchName, setSearchName] = useState("");
 
-  // 分析过滤器
-  const [analysisLevel, setAnalysisLevel] = useState<"school" | "year" | "class">("school");
-  const [analysisGrade, setAnalysisGrade] = useState("");
-  const [analysisClass, setAnalysisClass] = useState("");
+  // AI 建议相关状态
+  const [selectedStudent, setSelectedStudent] = useState<StudentRecord | null>(null);
+  const [advice, setAdvice] = useState<string>("");
 
   // 初始化：从本地存储加载数据
   useEffect(() => {
@@ -40,6 +38,7 @@ export default function Parent() {
         const data = JSON.parse(saved);
         setStudents(data);
         setFilteredStudents(data);
+        setHasLoadedData(true);
       } catch (error) {
         console.error("加载数据失败:", error);
       }
@@ -83,6 +82,7 @@ export default function Parent() {
       if (result.result && result.result.data && Array.isArray(result.result.data) && result.result.data.length > 0) {
         setStudents(result.result.data);
         setFilteredStudents(result.result.data);
+        setHasLoadedData(true);
         toast.success("成功加载分享数据");
         setActiveTab("query");
       } else {
@@ -94,6 +94,42 @@ export default function Parent() {
     } finally {
       setIsLoadingShare(false);
     }
+  };
+
+  // AI 建议生成
+  const generateAdviceMutation = trpc.ai.generateAdvice.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        setAdvice(data.advice);
+        toast.success("AI 建议生成成功");
+      } else {
+        toast.error(data.advice || "生成失败");
+      }
+    },
+    onError: (error) => {
+      toast.error(`错误: ${error.message}`);
+    },
+  });
+
+  const handleGenerateAdvice = async () => {
+    if (!selectedStudent) {
+      toast.error("请先选择学生");
+      return;
+    }
+
+    const selectTotal = selectedStudent.selectedProjects?.reduce((sum, p) => {
+      const contrib = typeof p.contrib === "string" ? parseFloat(p.contrib) : p.contrib;
+      return sum + (contrib || 0);
+    }, 0) || 0;
+
+    generateAdviceMutation.mutate({
+      name: selectedStudent.name,
+      gender: selectedStudent.gender,
+      total40: typeof selectedStudent.total40 === "string" ? parseFloat(selectedStudent.total40) : selectedStudent.total40 || 0,
+      longContrib: typeof selectedStudent.longContrib === "string" ? parseFloat(selectedStudent.longContrib) : selectedStudent.longContrib,
+      ballContrib: typeof selectedStudent.ballContrib === "string" ? parseFloat(selectedStudent.ballContrib) : selectedStudent.ballContrib,
+      selectContrib: selectTotal,
+    });
   };
 
   const handleLogout = () => {
@@ -121,36 +157,34 @@ export default function Parent() {
 
       {/* 主要内容 */}
       <div className="max-w-7xl mx-auto p-4">
-        {/* 分享码输入区域 */}
-        {students.length === 0 && (
-          <Card className="p-6 mb-6 bg-blue-50 border-blue-200">
-            <h2 className="text-lg font-bold mb-4">输入教师分享码查询成绩</h2>
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                placeholder="输入教师提供的分享码"
-                value={shareCode}
-                onChange={(e) => setShareCode(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleQueryByShareCode()}
-              />
-              <Button 
-                onClick={handleQueryByShareCode}
-                disabled={isLoadingShare}
-              >
-                {isLoadingShare ? "加载中..." : "查询"}
-              </Button>
-            </div>
-          </Card>
-        )}
-
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="query">查询</TabsTrigger>
-            <TabsTrigger value="ai">AI 建议</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-1">
+            <TabsTrigger value="query">查询与建议</TabsTrigger>
           </TabsList>
 
           {/* 查询标签页 */}
           <TabsContent value="query" className="space-y-4">
+            {!hasLoadedData && (
+              <Card className="p-6 mb-6 bg-blue-50 border-blue-200">
+                <h2 className="text-lg font-bold mb-4">输入教师分享码查询成绩</h2>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="输入教师提供的分享码"
+                    value={shareCode}
+                    onChange={(e) => setShareCode(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && handleQueryByShareCode()}
+                  />
+                  <Button 
+                    onClick={handleQueryByShareCode}
+                    disabled={isLoadingShare}
+                  >
+                    {isLoadingShare ? "加载中..." : "查询"}
+                  </Button>
+                </div>
+              </Card>
+            )}
+
             <Card className="p-6">
               <h2 className="text-xl font-bold mb-4">学生成绩查询</h2>
 
@@ -240,6 +274,7 @@ export default function Parent() {
                       <th className="text-left py-2 px-2">班级</th>
                       <th className="text-left py-2 px-2">性别</th>
                       <th className="text-left py-2 px-2">成绩</th>
+                      <th className="text-center py-2 px-2">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -248,25 +283,109 @@ export default function Parent() {
                         <td className="py-2 px-2">{student.name}</td>
                         <td className="py-2 px-2">{student.class}</td>
                         <td className="py-2 px-2">{student.gender}</td>
-                        <td className="py-2 px-2">{student.total40}</td>
+                        <td className="py-2 px-2 font-bold text-primary">{student.total40}</td>
+                        <td className="py-2 px-2 text-center">
+                          <Button
+                            size="sm"
+                            variant={selectedStudent?.name === student.name ? "default" : "outline"}
+                            onClick={() => {
+                              setSelectedStudent(student);
+                              setAdvice("");
+                            }}
+                          >
+                            {selectedStudent?.name === student.name ? "已选择" : "选择"}
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </Card>
-            ) : (
+            ) : hasLoadedData ? (
               <Card className="p-6 text-center text-muted-foreground">
                 暂无数据
               </Card>
-            )}
-          </TabsContent>
+            ) : null}
 
-          {/* AI 建议标签页 */}
-          <TabsContent value="ai">
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-4">AI 训练建议</h2>
-              <AIAdvice />
-            </Card>
+            {/* 选中学生的 AI 建议区域 */}
+            {selectedStudent && (
+              <Card className="p-6 bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
+                <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+                  <Sparkles className="w-6 h-6 text-purple-600" />
+                  AI 训练建议 - {selectedStudent.name}
+                </h2>
+
+                {/* 学生成绩详情 */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <p className="text-xs text-muted-foreground mb-1">长跑/游泳</p>
+                    <p className="text-2xl font-bold text-blue-600">{selectedStudent.longContrib}</p>
+                    <p className="text-xs text-muted-foreground">/ 15分</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <p className="text-xs text-muted-foreground mb-1">球类项目</p>
+                    <p className="text-2xl font-bold text-green-600">{selectedStudent.ballContrib}</p>
+                    <p className="text-xs text-muted-foreground">/ 9分</p>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <p className="text-xs text-muted-foreground mb-1">总分</p>
+                    <p className="text-2xl font-bold text-purple-600">{selectedStudent.total40}</p>
+                    <p className="text-xs text-muted-foreground">/ 40分</p>
+                  </div>
+                </div>
+
+                {/* 生成建议按钮 */}
+                <Button
+                  onClick={handleGenerateAdvice}
+                  disabled={generateAdviceMutation.isPending}
+                  className="w-full gap-2 mb-4"
+                >
+                  {generateAdviceMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      生成 AI 训练建议
+                    </>
+                  )}
+                </Button>
+
+                {/* AI 建议展示 */}
+                {advice && (
+                  <div className="bg-white rounded-lg p-4 border border-border">
+                    <div className="prose prose-sm max-w-none">
+                      <Streamdown>{advice}</Streamdown>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {/* 分享码输入区域 - 放在查询页面底部 */}
+            {!hasLoadedData && (
+              <Card className="p-6 bg-amber-50 border-amber-200 mt-6">
+                <h3 className="text-lg font-bold mb-3">还没有加载成绩数据？</h3>
+                <p className="text-sm text-muted-foreground mb-4">请输入教师提供的分享码来查询学生成绩</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="输入教师提供的分享码"
+                    value={shareCode}
+                    onChange={(e) => setShareCode(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && handleQueryByShareCode()}
+                  />
+                  <Button 
+                    onClick={handleQueryByShareCode}
+                    disabled={isLoadingShare}
+                  >
+                    {isLoadingShare ? "加载中..." : "查询"}
+                  </Button>
+                </div>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>

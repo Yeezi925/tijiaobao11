@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, BarChart3, Sparkles, Download, Trash2 } from "lucide-react";
+import { Upload, BarChart3, Sparkles, Download, Trash2, Copy } from "lucide-react";
 import { StudentRecord } from "@/lib/scoring";
 import { parseExcelFile, exportToExcel } from "@/lib/excel";
 import { performAnalysis, getUniqueGrades, getUniqueClasses } from "@/lib/analysis";
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import AIAdvice from "./AIAdvice";
 import LessonPlanGenerator from "./LessonPlanGenerator";
 import { BookOpen } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 const STORAGE_KEY = "tijiaobao_scores";
 
@@ -37,6 +38,8 @@ export default function Home() {
   const [filteredStudents, setFilteredStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("query");
+  const [shareCode, setShareCode] = useState("");
+  const [showShareCode, setShowShareCode] = useState(false);
 
   // 查询过滤器
   const [queryType, setQueryType] = useState<"all" | "grade" | "class" | "name">("all");
@@ -138,8 +141,44 @@ export default function Home() {
 
     setIsLoading(true);
     try {
+      // 调用后端 API 保存每个学生的数据
+      for (const student of students) {
+        await fetch("/api/trpc/teacher.saveStudentData", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            json: {
+              name: student.name,
+              grade: student.grade,
+              class: student.class,
+              school: student.school,
+              gender: student.gender,
+              longrun: student.longrun,
+              swim: student.swim,
+              long100: student.long100,
+              longContrib: student.longContrib,
+              football: student.football,
+              basketball: student.basketball,
+              volleyball: student.volleyball,
+              ballContrib: student.ballContrib,
+              run50: student.run50,
+              situp: student.situp,
+              ball: student.ball,
+              rope: student.rope,
+              pullup: student.pullup,
+              jump: student.jump,
+              selectContrib: student.selectContrib,
+              selectedProjects: student.selectedProjects,
+              total40: student.total40?.toString(),
+              status: student.status,
+            }
+          }),
+          credentials: "include",
+        });
+      }
       toast.success(`已保存 ${students.length} 条学生记录到数据库`);
     } catch (error) {
+      console.error("保存失败:", error);
       toast.error("保存失败");
     } finally {
       setIsLoading(false);
@@ -153,14 +192,36 @@ export default function Home() {
       return;
     }
 
-    const shareCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const shareUrl = `${window.location.origin}/share/${shareCode}`;
-    
+    setIsLoading(true);
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast.success(`分享链接已复制: ${shareCode}`);
+      // 调用后端 API 生成分享链接
+      const response = await fetch("/api/trpc/teacher.createShareLink", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          json: {
+            title: "学生成绩分享",
+            description: `分享 ${students.length} 名学生的成绩数据`,
+            studentIds: students.map((_, idx) => idx + 1),
+          }
+        }),
+        credentials: "include",
+      });
+      
+      const result = await response.json();
+      
+      if (result.result?.data?.shareCode) {
+        setShareCode(result.result.data.shareCode);
+        setShowShareCode(true);
+        toast.success(`分享码已生成: ${result.result.data.shareCode}`);
+      } else {
+        toast.error("生成分享码失败");
+      }
     } catch (error) {
-      toast.error("复制失败");
+      console.error("生成分享链接失败:", error);
+      toast.error("生成分享链接失败");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -421,7 +482,7 @@ export default function Home() {
                     <Sparkles className="w-4 h-4" />
                     保存到数据库
                   </Button>
-                  <Button onClick={handleGenerateShareLink} variant="default" className="gap-2">
+                  <Button onClick={handleGenerateShareLink} variant="default" className="gap-2" disabled={isLoading}>
                     <Sparkles className="w-4 h-4" />
                     生成分享链接
                   </Button>
@@ -430,6 +491,29 @@ export default function Home() {
                     清空数据
                   </Button>
                 </div>
+                
+                {showShareCode && shareCode && (
+                  <Card className="p-4 mt-4 bg-green-50 border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">分享码已生成</p>
+                        <p className="text-2xl font-bold text-green-600 font-mono">{shareCode}</p>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          navigator.clipboard.writeText(shareCode);
+                          toast.success("分享码已复制到剪贴板");
+                        }}
+                        variant="outline"
+                        className="gap-2"
+                      >
+                        <Copy className="w-4 h-4" />
+                        复制
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">将此分享码分享给家长，他们可以输入此码查看学生成绩</p>
+                  </Card>
+                )}
               </Card>
             )}
           </TabsContent>
