@@ -18,6 +18,8 @@ export default function Parent() {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<StudentRecord[]>([]);
   const [activeTab, setActiveTab] = useState("query");
+  const [shareCode, setShareCode] = useState("");
+  const [isLoadingShare, setIsLoadingShare] = useState(false);
 
   // 查询过滤器
   const [queryType, setQueryType] = useState<"all" | "grade" | "class" | "name">("all");
@@ -61,6 +63,39 @@ export default function Parent() {
     setFilteredStudents(result);
   };
 
+  // 处理分享码查询
+  const handleQueryByShareCode = async () => {
+    if (!shareCode.trim()) {
+      toast.error("请输入分享码");
+      return;
+    }
+
+    setIsLoadingShare(true);
+    try {
+      // 调用后端 API 获取分享数据
+      const response = await fetch("/api/trpc/parent.getSharedData?input=" + encodeURIComponent(JSON.stringify({ shareCode })), {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      const result = await response.json();
+      
+      if (result.result && result.result.data && Array.isArray(result.result.data) && result.result.data.length > 0) {
+        setStudents(result.result.data);
+        setFilteredStudents(result.result.data);
+        toast.success("成功加载分享数据");
+        setActiveTab("query");
+      } else {
+        toast.error("分享码无效或已过期");
+      }
+    } catch (error) {
+      toast.error("加载分享数据失败");
+      console.error(error);
+    } finally {
+      setIsLoadingShare(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("userRole");
     window.location.href = "/login";
@@ -86,6 +121,28 @@ export default function Parent() {
 
       {/* 主要内容 */}
       <div className="max-w-7xl mx-auto p-4">
+        {/* 分享码输入区域 */}
+        {students.length === 0 && (
+          <Card className="p-6 mb-6 bg-blue-50 border-blue-200">
+            <h2 className="text-lg font-bold mb-4">输入教师分享码查询成绩</h2>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="输入教师提供的分享码"
+                value={shareCode}
+                onChange={(e) => setShareCode(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleQueryByShareCode()}
+              />
+              <Button 
+                onClick={handleQueryByShareCode}
+                disabled={isLoadingShare}
+              >
+                {isLoadingShare ? "加载中..." : "查询"}
+              </Button>
+            </div>
+          </Card>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="query">查询</TabsTrigger>
