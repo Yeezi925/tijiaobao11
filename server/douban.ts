@@ -29,7 +29,13 @@ export async function generateTrainingAdvice(studentInfo: {
 
 请根据学生的成绩分析其优势和不足，提供具体的训练建议。`;
 
-  let userPrompt = `请为以下学生提供训练建议：
+  // 分析学生的弱项
+  const weakAreas = [];
+  if ((studentInfo.longContrib || 0) < 10) weakAreas.push("长跑/游泳");
+  if ((studentInfo.ballContrib || 0) < 6) weakAreas.push("球类项目");
+  if ((studentInfo.selectContrib || 0) < 12) weakAreas.push("选考项目");
+
+  let userPrompt = `请为以下学生提供个性化训练计划：
 
 姓名：${studentInfo.name}
 性别：${studentInfo.gender}`;
@@ -45,12 +51,22 @@ export async function generateTrainingAdvice(studentInfo: {
   userPrompt += `\n总分：${studentInfo.total40}/40分
 长跑/游泳得分：${studentInfo.longContrib || 0}/15分
 球类项目得分：${studentInfo.ballContrib || 0}/9分
-选考项目得分：${studentInfo.selectContrib || 0}/16分
+选考项目得分：${studentInfo.selectContrib || 0}/16分`;
 
+  if (weakAreas.length > 0) {
+    userPrompt += `\n
+弱项分析：${weakAreas.join("、")}`;
+  }
+
+  userPrompt += `\n
 请提供：
 1. 成绩分析（优势和不足）
-2. 具体的训练建议（3-5条）
-3. 预期改进目标`;
+2. 根据弱项提供具体的训练计划：
+   - 训练项目
+   - 训练频次（每周）
+   - 训练时间（每次）
+   - 训练强度
+3. 预期改进目标和时间框架`;
 
   try {
     console.log("[AI 建议] 调用 LLM 服务生成建议...");

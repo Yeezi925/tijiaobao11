@@ -72,6 +72,30 @@ export default function Home() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   };
 
+  // tRPC 保存学生数据
+  const saveStudentMutation = trpc.teacher.saveStudentData.useMutation({
+    onSuccess: () => {
+      toast.success("学生数据已保存到数据库");
+    },
+    onError: (error) => {
+      toast.error(`保存失败: ${error.message}`);
+    },
+  });
+
+  // tRPC 创建分享链接
+  const createShareLinkMutation = trpc.teacher.createShareLink.useMutation({
+    onSuccess: (data) => {
+      if (data.shareCode) {
+        setShareCode(data.shareCode);
+        setShowShareCode(true);
+        toast.success(`分享码已生成: ${data.shareCode}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`生成分享码失败: ${error.message}`);
+    },
+  });
+
   // 处理文件上传
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,39 +165,32 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      // 调用后端 API 保存每个学生的数据
+      // 使用 tRPC 保存每个学生的数据
       for (const student of students) {
-        await fetch("/api/trpc/teacher.saveStudentData", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            json: {
-              name: student.name,
-              grade: student.grade,
-              class: student.class,
-              school: student.school,
-              gender: student.gender,
-              longrun: student.longrun,
-              swim: student.swim,
-              long100: student.long100,
-              longContrib: student.longContrib,
-              football: student.football,
-              basketball: student.basketball,
-              volleyball: student.volleyball,
-              ballContrib: student.ballContrib,
-              run50: student.run50,
-              situp: student.situp,
-              ball: student.ball,
-              rope: student.rope,
-              pullup: student.pullup,
-              jump: student.jump,
-              selectContrib: student.selectContrib,
-              selectedProjects: student.selectedProjects,
-              total40: student.total40?.toString(),
-              status: student.status,
-            }
-          }),
-          credentials: "include",
+        await saveStudentMutation.mutateAsync({
+          name: student.name,
+          grade: student.grade,
+          class: student.class,
+          school: student.school,
+          gender: student.gender as "男" | "女",
+          longrun: student.longrun,
+          swim: student.swim,
+          long100: student.long100,
+          longContrib: student.longContrib?.toString(),
+          football: student.football,
+          basketball: student.basketball,
+          volleyball: student.volleyball,
+          ballContrib: student.ballContrib?.toString(),
+          run50: student.run50,
+          situp: student.situp,
+          ball: student.ball,
+          rope: student.rope,
+          pullup: student.pullup,
+          jump: student.jump,
+          selectContrib: student.selectContrib?.toString(),
+          selectedProjects: student.selectedProjects ? JSON.stringify(student.selectedProjects) : undefined,
+          total40: student.total40?.toString(),
+          status: student.status,
         });
       }
       toast.success(`已保存 ${students.length} 条学生记录到数据库`);
@@ -194,32 +211,14 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      // 调用后端 API 生成分享链接
-      const response = await fetch("/api/trpc/teacher.createShareLink", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          json: {
-            title: "学生成绩分享",
-            description: `分享 ${students.length} 名学生的成绩数据`,
-            studentIds: students.map((_, idx) => idx + 1),
-          }
-        }),
-        credentials: "include",
+      // 使用 tRPC 生成分享链接
+      await createShareLinkMutation.mutateAsync({
+        title: "学生成绩分享",
+        description: `分享 ${students.length} 名学生的成绩数据`,
+        studentIds: students.map((_, idx) => idx + 1),
       });
-      
-      const result = await response.json();
-      
-      if (result.result?.data?.shareCode) {
-        setShareCode(result.result.data.shareCode);
-        setShowShareCode(true);
-        toast.success(`分享码已生成: ${result.result.data.shareCode}`);
-      } else {
-        toast.error("生成分享码失败");
-      }
     } catch (error) {
-      console.error("生成分享链接失败:", error);
-      toast.error("生成分享链接失败");
+      console.error("生成分享码失败:", error);
     } finally {
       setIsLoading(false);
     }
@@ -262,7 +261,7 @@ export default function Home() {
       {/* 主内容区 */}
       <main className="container py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-6">
+          <TabsList className="grid w-full grid-cols-6 mb-6">
             <TabsTrigger value="query" className="flex items-center gap-2">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">导入/查询</span>
@@ -278,6 +277,10 @@ export default function Home() {
             <TabsTrigger value="lesson" className="flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
               <span className="hidden sm:inline">教案</span>
+            </TabsTrigger>
+            <TabsTrigger value="manage" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">数据管理</span>
             </TabsTrigger>
           </TabsList>
 
@@ -478,13 +481,13 @@ export default function Home() {
                     <Download className="w-4 h-4" />
                     导出 Excel
                   </Button>
-                  <Button onClick={handleSaveToDatabase} variant="default" className="gap-2">
+                  <Button onClick={handleSaveToDatabase} variant="default" className="gap-2" disabled={saveStudentMutation.isPending || isLoading}>
                     <Sparkles className="w-4 h-4" />
-                    保存到数据库
+                    {saveStudentMutation.isPending ? "保存中..." : "保存到数据库"}
                   </Button>
-                  <Button onClick={handleGenerateShareLink} variant="default" className="gap-2" disabled={isLoading}>
+                  <Button onClick={handleGenerateShareLink} variant="default" className="gap-2" disabled={createShareLinkMutation.isPending || isLoading}>
                     <Sparkles className="w-4 h-4" />
-                    生成分享链接
+                    {createShareLinkMutation.isPending ? "生成中..." : "生成分享链接"}
                   </Button>
                   <Button onClick={handleClearData} variant="destructive" className="gap-2">
                     <Trash2 className="w-4 h-4" />
@@ -553,6 +556,24 @@ export default function Home() {
           {/* 教案生成标签页 */}
           <TabsContent value="lesson" className="space-y-4">
             <LessonPlanGenerator />
+          </TabsContent>
+
+          <TabsContent value="manage" className="space-y-4">
+            <Card className="p-6">
+              <h2 className="text-2xl font-semibold mb-6">Data Management</h2>
+              <div className="space-y-4">
+                <p className="text-muted-foreground">View and manage all saved share links for student data.</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-900 mb-2">How to use share links:</h3>
+                  <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                    <li>Import student data in the Import/Query tab</li>
+                    <li>Click Generate Share Link button to create a share code</li>
+                    <li>Copy the share code and send to parents</li>
+                    <li>Parents can enter the code in the Parent Portal to view scores</li>
+                  </ol>
+                </div>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
