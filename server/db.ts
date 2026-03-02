@@ -102,6 +102,14 @@ export async function saveStudentScoreData(data: InsertStudentScoreData) {
 
   try {
     const result = await db.insert(studentScoreData).values(data);
+    
+    // u83b7u53d6u63d2u5165u7684u8bb0u5f55 ID
+    const insertResult = result as any;
+    if (insertResult.insertId) {
+      const savedRecord = await db.select().from(studentScoreData).where(eq(studentScoreData.id, Number(insertResult.insertId)));
+      return savedRecord[0] || result;
+    }
+    
     return result;
   } catch (error) {
     console.error("[Database] Failed to save student score data:", error);
