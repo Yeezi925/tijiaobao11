@@ -270,15 +270,14 @@ export default function Parent() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-border">
                     <tr>
-                      <th className="text-left py-2 px-2">u59d3u540d</th>
-                      <th className="text-left py-2 px-2">u73edu7ea7</th>
-                      <th className="text-left py-2 px-2">u6027u522b</th>
-                      <th className="text-center py-2 px-2">u957fu8dd1/u6e38u6cf3</th>
-                      <th className="text-center py-2 px-2">u7403u7c7bu9879u76ee</th>
-                      <th className="text-center py-2 px-2">u9009u8003u9879u76ee1</th>
-                      <th className="text-center py-2 px-2">u9009u8003u9879u76ee2</th>
-                      <th className="text-center py-2 px-2">u603bu6210u7ee9</th>
-                      <th className="text-center py-2 px-2">u64cd作</th>
+                      <th className="text-left py-2 px-2">姓名</th>
+                      <th className="text-left py-2 px-2">班级</th>
+                      <th className="text-left py-2 px-2">性别</th>
+                      <th className="text-center py-2 px-2">长跑/游泳</th>
+                      <th className="text-center py-2 px-2">球类项目</th>
+                      <th className="text-center py-2 px-2">选考项目</th>
+                      <th className="text-center py-2 px-2">总成绩</th>
+                      <th className="text-center py-2 px-2">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -289,8 +288,7 @@ export default function Parent() {
                         <td className="py-2 px-2">{student.gender}</td>
                         <td className="py-2 px-2 text-center text-blue-600 font-semibold">{student.longContrib || "-"}</td>
                         <td className="py-2 px-2 text-center text-green-600 font-semibold">{student.ballContrib || "-"}</td>
-                        <td className="py-2 px-2 text-center text-purple-600 font-semibold">{student.selectedProjects?.[0]?.contrib || "-"}</td>
-                        <td className="py-2 px-2 text-center text-purple-600 font-semibold">{student.selectedProjects?.[1]?.contrib || "-"}</td>
+                        <td className="py-2 px-2 text-center text-purple-600 font-semibold">{student.selectContrib || "-"}</td>
                         <td className="py-2 px-2 text-center font-bold text-primary text-lg">{student.total40}</td>
                         <td className="py-2 px-2 text-center">
                           <Button
