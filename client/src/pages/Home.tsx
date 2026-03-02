@@ -40,6 +40,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("query");
   const [shareCode, setShareCode] = useState("");
   const [showShareCode, setShowShareCode] = useState(false);
+  const [expireOption, setExpireOption] = useState<"7" | "30" | "90" | "never">("7");
 
   // 查询过滤器
   const [queryType, setQueryType] = useState<"all" | "grade" | "class" | "name">("all");
@@ -222,11 +223,20 @@ export default function Home() {
 
     setIsLoading(true);
     try {
+      // 计算过期时间
+      let expiresAt: Date | undefined;
+      if (expireOption !== "never") {
+        const days = parseInt(expireOption);
+        expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + days);
+      }
+
       // 使用 tRPC 生成分享链接
       await createShareLinkMutation.mutateAsync({
         title: "学生成绩分享",
         description: `分享 ${students.length} 名学生的成绩数据`,
         studentIds: students.map((_, idx) => idx + 1),
+        expiresAt,
       });
     } catch (error) {
       console.error("生成分享码失败:", error);
@@ -496,10 +506,25 @@ export default function Home() {
                     <Sparkles className="w-4 h-4" />
                     {saveStudentMutation.isPending ? "保存中..." : "保存到数据库"}
                   </Button>
-                  <Button onClick={handleGenerateShareLink} variant="default" className="gap-2" disabled={createShareLinkMutation.isPending || isLoading}>
-                    <Sparkles className="w-4 h-4" />
-                    {createShareLinkMutation.isPending ? "生成中..." : "生成分享链接"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium">过期时间:</label>
+                      <select
+                        value={expireOption}
+                        onChange={(e) => setExpireOption(e.target.value as "7" | "30" | "90" | "never")}
+                        className="px-3 py-2 border border-border rounded-md text-sm bg-white"
+                      >
+                        <option value="7">7天</option>
+                        <option value="30">30天</option>
+                        <option value="90">90天</option>
+                        <option value="never">永久</option>
+                      </select>
+                    </div>
+                    <Button onClick={handleGenerateShareLink} variant="default" className="gap-2" disabled={createShareLinkMutation.isPending || isLoading}>
+                      <Sparkles className="w-4 h-4" />
+                      {createShareLinkMutation.isPending ? "生成中..." : "生成分享链接"}
+                    </Button>
+                  </div>
                   <Button onClick={handleClearData} variant="destructive" className="gap-2">
                     <Trash2 className="w-4 h-4" />
                     清空数据
@@ -547,6 +572,12 @@ export default function Home() {
                           复制
                         </Button>
                       </div>
+                    </div>
+                    <div className="border-t border-green-200 pt-3 mt-3">
+                      <p className="text-sm text-muted-foreground mb-1">过期时间</p>
+                      <p className="text-sm font-medium">
+                        {expireOption === "never" ? "永久有效" : `${expireOption}天后失效`}
+                      </p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">将分享码或链接分享给家长查看学生成绩</p>
                   </Card>
